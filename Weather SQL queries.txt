@@ -1,0 +1,645 @@
+#Part1
+-- Q1 most damage
+SELECT
+    episode_id,
+    SUM(damage_property) AS total_property_damage
+FROM
+    severe_weather
+GROUP BY
+    episode_id
+ORDER BY
+    total_property_damage DESC
+LIMIT
+    10;
+    
+-- Q2 storm
+SELECT
+    episode_id,
+    state,
+    cz_name,
+    event_begin_time,
+    event_end_time
+FROM
+    severe_weather
+WHERE
+    episode_id = '162128';
+    
+-- Q3 type of event caused the most injuries
+SELECT
+    event_type,
+    SUM(injuries_direct + injuries_indirect) AS all_injuries
+FROM
+    severe_weather
+GROUP BY
+    event_type
+ORDER BY
+    all_injuries DESC;
+
+-- Q4 was there a storm that had lots of tornados?
+SELECT
+    episode_id,
+    SUM(injuries_direct + injuries_indirect) AS all_injuries,
+    COUNT(*) AS tornado_events
+FROM
+    severe_weather
+WHERE
+    event_type = 'tornado'
+GROUP BY
+    episode_id
+ORDER BY
+    all_injuries DESC;
+    
+SELECT
+    *
+FROM
+    severe_weather
+WHERE
+    episode_id = '164438';
+    
+-- Q5 damage for each event and total damage for the state.
+SELECT
+    state,
+    event_id,
+    event_type,
+    damage_property,
+    SUM(damage_property) OVER(PARTITION BY state) AS state_damage_total
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    state,
+    event_id;
+    
+-- Q6 damage for each event and cumulative damage for the state
+SELECT
+    state,
+    event_id,
+    event_type,
+    damage_property,
+    SUM(damage_property) OVER(
+        PARTITION BY state
+        ORDER BY
+            event_id ROWS UNBOUNDED PRECEDING
+    ) AS cumulative_state_damage
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    state,
+    event_id;
+
+#Part2
+-- Q1 what state had the most damage to crops?
+SELECT
+    state,
+    SUM(damage_crops) AS damage_c
+FROM
+    severe_weather
+GROUP BY
+    state
+ORDER BY
+    damage_c DESC;
+
+    
+-- Q2 property damage for each event and total property damage for the state.
+SELECT
+    state,
+    event_id,
+    event_type,
+    damage_property,
+    SUM(damage_property) OVER(PARTITION BY state) state_damage_total
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    state,
+    event_id;
+    
+-- Q3 property damage for each event and cumulative property damage for the state
+SELECT
+    state,
+    event_id,
+    event_type,
+    damage_property,
+    SUM(damage_property) OVER(
+        PARTITION BY state
+        ORDER BY
+            event_id -- addition
+            ROWS UNBOUNDED PRECEDING -- addition
+    ) cumulative_state_damage
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    state,
+    event_id;
+    
+-- Q4 property damage for each event and cumulative property damage by storm
+SELECT
+    episode_id,
+    event_id,
+    event_type,
+    damage_property,
+    SUM(damage_property) OVER(
+        PARTITION BY episode_id
+        ORDER BY
+            event_id ROWS UNBOUNDED PRECEDING
+    ) cumulative_storm_damage
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    episode_id,
+    event_id;
+    
+-- Q5 property damage for each event and average property damage for last 3 events
+SELECT
+    event_id,
+    event_type,
+    damage_property,
+    AVG(damage_property) OVER(
+        ORDER BY
+            event_id ROWS BETWEEN 2 PRECEDING
+            AND CURRENT ROW
+    ) avg_damage_last_3_events
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+ORDER BY
+    event_id;
+
+#Part3
+-- Q1: What have been our top 5 most common sources of severe weather information?
+SELECT
+    source,
+    COUNT(*) AS n
+FROM
+    severe_weather
+GROUP BY
+    source
+ORDER BY
+    n DESC;
+    
+-- Q2: What were property damage totals by state and event type?
+SELECT
+    state,
+    event_type,
+    SUM(damage_property) AS total_damage
+FROM
+    severe_weather
+WHERE
+    damage_property > 0
+GROUP BY
+    state,
+    event_type
+ORDER BY
+    state;
+    
+-- Q3: How many days did the longest weather event last?
+SELECT
+    episode_id,
+    event_id,
+    event_type,
+    event_begin_time,
+    event_end_time,
+    TIMESTAMPDIFF(DAY, event_begin_time, event_end_time) AS time_diff
+FROM
+    severe_weather
+ORDER BY
+    time_diff DESC
+LIMIT
+    10;
+    
+-- Q4: List all weather events and sequence those events by county and storm.
+--     Only include the columns in the box below within the results.
+SELECT
+    cz_name,
+    state,
+    event_id,
+    event_type,
+    episode_id,
+    DENSE_RANK () OVER (
+        PARTITION BY cz_name,
+        state
+        ORDER BY
+            episode_id
+    ) AS episode_sequence
+FROM
+    severe_weather
+WHERE
+    cz_type = 'C'
+ORDER BY
+    cz_name,
+    episode_id;
+    
+-- Q5: For each month, summarize property damage and cumulative damage.
+SELECT
+    extract(MONTH, event_begin_time) AS month,
+    SUM(damage_property) AS total_damage,
+    SUM(total_damage) OVER(
+        ORDER BY
+            month ROWS UNBOUNDED PRECEDING
+    ) cumulative_damage
+FROM
+    severe_weather
+GROUP BY
+    month
+ORDER BY
+    month;
+    
+-- Q6: Prepare a CASE statement
+SELECT
+    source,
+    COUNT(*) AS source_count,
+    CASE
+        WHEN source_count > 2000 THEN 'major source'
+        ELSE 'minor source'
+    END AS source_category
+FROM
+    severe_weather
+GROUP BY
+    source
+ORDER BY
+    source_count DESC;
+    
+-- Q7: Prepare common table expressions (CTEs)
+    WITH state_size AS(
+        SELECT
+            state_fips_code,
+            state_name,
+            ROUND((area_land_meters * 0.000001), 2) AS area_land_km
+        FROM
+            state_sizes
+    ),
+    storm_num AS(
+        SELECT
+            state_fips_code,
+            COUNT(*) AS total_storm
+        FROM
+            severe_weather
+        GROUP BY
+            state_fips_code
+    ),
+    storm_per_size AS(
+        SELECT
+            s.state_name,
+            n.total_storm,
+            s.area_land_km,
+            ROUND((n.total_storm / s.area_land_km), 2) AS storm_per_km
+        FROM
+            state_size s
+            INNER JOIN storm_num n USING (state_fips_code)
+        ORDER BY
+            storm_per_km DESC
+    )
+SELECT
+    *
+FROM
+    storm_per_size;
+
+#Part4
+-- Q1 how many storm-related deaths were there in each state?
+SELECT
+    s.state_name,
+    SUM(deaths_direct + deaths_indirect) AS total_death
+FROM
+    severe_weather w
+    INNER JOIN state_sizes s USING(state_fips_code)
+GROUP BY
+    w.state_fips_code,
+    s.state_name
+ORDER BY
+    total_death DESC;
+    
+-- Another Ans
+SELECT
+    CONCAT(s.state_fips_code, ' - ', s.state_name) AS state,
+    SUM(w.deaths_direct + w.deaths_indirect) AS total_deaths
+FROM
+    severe_weather w
+    INNER JOIN state_sizes s USING (state_fips_code)
+GROUP BY
+    CONCAT(s.state_fips_code, ' - ', s.state_name)
+ORDER BY
+    total_deaths DESC;
+    
+-- Q2 How long was each storm event?
+SELECT
+    episode_id,
+    TIMESTAMPDIFF(DAY, event_begin_time, event_end_time) AS time_diff
+FROM
+    severe_weather
+ORDER BY
+    time_diff DESC
+LIMIT
+    10;
+    
+-- Another Ans
+SELECT
+    event_id,
+    event_type,
+    DATEDIFF(day, event_begin_time, event_end_time) AS duration_days
+FROM
+    severe_weather
+ORDER BY
+    duration_days DESC,
+    event_id;
+    
+-- Q3 How many events were there in each year, quarter, and month?
+SELECT
+    COUNT(*) AS total_events,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    EXTRACT(
+        QUARTER
+        FROM
+            event_begin_time
+    ) AS quarter,
+    EXTRACT(
+        YEAR
+        FROM
+            event_begin_time
+    ) AS year
+FROM
+    severe_weather
+GROUP BY
+    month,
+    quarter,
+    year
+ORDER BY
+    month,
+    quarter,
+    year;
+-- Cody's Ans
+SELECT
+    EXTRACT(
+        YEAR
+        FROM
+            event_begin_time
+    ) AS year,
+    EXTRACT(
+        QUARTER
+        FROM
+            event_begin_time
+    ) AS quarter,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    COUNT(*) AS number_of_events
+FROM
+    severe_weather
+GROUP BY
+    year,
+    quarter,
+    month
+ORDER BY
+    year,
+    quarter,
+    month;
+    
+-- What about the cumulative number of events?
+SELECT
+    EXTRACT(
+        YEAR
+        FROM
+            event_begin_time
+    ) AS year,
+    EXTRACT(
+        QUARTER
+        FROM
+            event_begin_time
+    ) AS quarter,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    COUNT(*) AS number_of_events,
+    SUM(number_of_events) OVER(
+        ORDER BY
+            month ROWS UNBOUNDED PRECEDING
+    ) cumulative_events
+FROM
+    severe_weather
+GROUP BY
+    year,
+    quarter,
+    month
+ORDER BY
+    year,
+    quarter,
+    month;
+    
+-- Are any of these events duplicates?
+SELECT
+    EXTRACT(
+        YEAR
+        FROM
+            event_begin_time
+    ) AS year,
+    EXTRACT(
+        QUARTER
+        FROM
+            event_begin_time
+    ) AS quarter,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    COUNT(*) AS number_of_events,
+    COUNT(DISTINCT event_id) AS distinct_events,
+    SUM(number_of_events) OVER(
+        ORDER BY
+            month ROWS UNBOUNDED PRECEDING
+    ) cumulative_events
+FROM
+    severe_weather
+GROUP BY
+    year,
+    quarter,
+    month
+ORDER BY
+    year,
+    quarter,
+    month;
+    
+--
+SELECT
+    event_id,
+    COUNT(*),
+    SUM(damage_property)
+FROM
+    severe_weather
+GROUP BY
+    event_id
+ORDER BY
+    COUNT(*) DESC;
+--
+SELECT
+    *
+FROM
+    severe_weather
+WHERE
+    event_id = 974834;
+
+#Part5
+-- Q1: Count the number of storm events and sum the amount of crop damage by reference location.
+SELECT
+    CONCAT(
+        s.state_fips_code,
+        ' - ',
+        w.cz_fips_code,
+        ' - ',
+        w.reference_location
+    ) AS location,
+    COUNT(*) AS total_events,
+    SUM(damage_crops) AS total_damages
+FROM
+    severe_weather w
+    INNER JOIN state_sizes s USING (state_fips_code)
+WHERE
+    w.cz_type = 'C'
+    AND damage_crops > 0
+GROUP BY
+    CONCAT(
+        s.state_fips_code,
+        ' - ',
+        w.cz_fips_code,
+        ' - ',
+        w.reference_location
+    )
+ORDER BY
+    total_damages DESC,
+    total_events DESC
+LIMIT
+    100;
+    
+-- Q2: Calculate the duration of events in minutes. Include the event ID, event type, start, and end time, and duration in your results.
+SELECT
+    event_id,
+    event_type,
+    event_begin_time,
+    event_end_time,
+    TIMESTAMPDIFF(MINUTE, event_begin_time, event_end_time) AS duration
+FROM
+    severe_weather
+ORDER BY
+    duration DESC
+LIMIT
+    10;
+    
+-- Q3: Then, update the previous query to categorize and count these events by their duration.
+    --     Use a CASE statement to categorize each event, and then, count the number of events in each of those categories.
+    -- sol(1)
+    WITH category AS (
+        SELECT
+            event_id,
+            event_type,
+            TIMESTAMPDIFF(MINUTE, event_begin_time, event_end_time) AS duration,
+            CASE
+                WHEN duration < 60 THEN 'under an hour'
+                ELSE 'at least an hour'
+            END AS time_category
+        FROM
+            severe_weather
+    )
+SELECT
+    time_category,
+    COUNT(event_id) AS n
+FROM
+    category
+GROUP BY
+    time_category
+ORDER BY
+    n DESC;
+    
+    -- sol(2)
+SELECT
+    time_category,
+    COUNT(*) AS n
+FROM
+    (
+        SELECT
+            event_id,
+            event_type,
+            TIMESTAMPDIFF(MINUTE, event_begin_time, event_end_time) AS duration,
+            CASE
+                WHEN duration < 60 THEN 'under an hour'
+                ELSE 'at least an hour'
+            END AS time_category
+        FROM
+            severe_weather
+    ) AS sub
+GROUP BY
+    time_category;
+    
+-- Q4: Count the number of storm events by Weather Forecast Office (WFO) and month.
+SELECT
+    wfo,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    COUNT(*) AS num_events
+FROM
+    severe_weather
+GROUP BY
+    wfo,
+    month
+HAVING
+    wfo = 'ALY'
+ORDER BY
+    month;
+    
+-- Q5: Update the previous query to also include the total number of events during the year at each WFO.
+SELECT
+    wfo,
+    EXTRACT(
+        MONTH
+        FROM
+            event_begin_time
+    ) AS month,
+    COUNT(*) AS num_events,
+    SUM(num_events) OVER(
+        ORDER BY
+            wfo,
+            month ROWS UNBOUNDED PRECEDING
+    ) cumulative_events
+FROM
+    severe_weather
+GROUP BY
+    wfo,
+    month
+HAVING
+    wfo = 'BIS';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
